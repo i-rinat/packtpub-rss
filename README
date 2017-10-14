@@ -1,0 +1,4 @@
+Converts Packtpub Book of the Day page into RSS feed.
+
+Deploy:
+gcloud app deploy app.yaml
