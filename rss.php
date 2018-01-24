@@ -3,45 +3,41 @@
 error_reporting(0);
 header('Content-Type: application/rss+xml; charset=utf-8');
 
-function get_rss_entry() {
-    $doc = new DOMDocument();
+require('simple_html_dom.php');
 
+function get_rss_entry() {
     // Fetch and parse HTML.
-    $doc->loadHTML(file_get_contents("https://www.packtpub.com/packt/offers/free-learning"));
+    $html = file_get_contents("https://www.packtpub.com/packt/offers/free-learning");
+    $doc = str_get_html($html);
 
     // Find interesting part.
-    $xpath = new DOMXPath($doc);
-    $res = $xpath->query("//*[@class='dotd-main-book-summary float-left']");
+    $res = $doc->find("div.dotd-main-book-summary");
 
-    if ($res->length == 0) {
+    if (count($res) == 0) {
         $title = "Error";
         $body = "Can't get description. Date: " . date(DATE_RFC822);
     } else {
 
         // Take first result.
-        $item = $res->item(0);
+        $res = $res[0];
 
-        // Collect text nodes.
-        $to_delete = array();
-        foreach ($item->childNodes as $child) {
-            if ($child->nodeName == "#text")
-                $to_delete[] = $child;
+        // Title is in its own div.
+        $title = trim($res->find('div.dotd-title')[0]->plaintext);
+
+        // One of the div's without a class containing book description.
+        $body = "";
+        foreach ($res->children() as $div) {
+            if ($div->tag != "div")
+                continue;
+
+            $cls = $div->getAttribute('class');
+            if (trim($cls) != "")
+                continue;
+
+            $body = $body . trim($div->plaintext) . "\n";
         }
 
-        // And delete them.
-        foreach ($to_delete as $entry)
-            $item->removeChild($entry);
-
-        // Remove timer line.
-        $item->removeChild($item->childNodes->item(0));
-
-        // Extract title of the book and then remove the node.
-        $title = trim($item->childNodes->item(0)->textContent);
-        $item->removeChild($item->childNodes->item(0));
-
-        $body = "";
-        foreach ($item->childNodes as $child)
-            $body = $body . trim($child->textContent);
+        $body = trim($body);
     }
 
     $guid = "They say ".$title." one should always ".$body." add a salt to ".
