@@ -3,43 +3,35 @@
 error_reporting(0);
 header('Content-Type: application/rss+xml; charset=utf-8');
 
-require('simple_html_dom.php');
+function get_day_start($ts) {
+    $lt = localtime($ts, TRUE);
+    return sprintf("%04d-%02d-%02dT00:00:00.000Z", $lt['tm_year'] + 1900,
+                   $lt['tm_mon'] + 1, $lt['tm_mday']);
+}
 
 function get_rss_entry() {
-    // Fetch and parse HTML.
-    $html = file_get_contents("https://www.packtpub.com/packt/offers/free-learning");
-    $doc = str_get_html($html);
+    // Generate the offers list URL.
+    $ts = time();
 
-    // Find interesting part.
-    $res = $doc->find("div.dotd-main-book-summary");
+    $url = sprintf("https://services.packtpub.com/free-learning-v1/offers?".
+                   "dateFrom=%s&dateTo=%s", get_day_start($ts),
+                   get_day_start($ts + 86400));
+    // Get list of the offers.
+    $offers_json = file_get_contents($url);
+    $offers = json_decode($offers_json, TRUE);
 
-    if (count($res) == 0) {
-        $title = "Error";
-        $body = "Can't get description. Date: " . date(DATE_RFC822);
-    } else {
+    // Get the first offer description.
+    $product_id = $offers['data'][0]['productId'];
+    $url = sprintf("https://static.packt-cdn.com/products/%s/summary",
+                   $product_id);
+    $book_descr_json = file_get_contents($url);
+    $book_descr = json_decode($book_descr_json, TRUE);
 
-        // Take first result.
-        $res = $res[0];
+    $title = strip_tags($book_descr['title']);
+    $body = strip_tags($book_descr['oneLiner']) . "\n\n";
+    $body .= strip_tags($book_descr['about']);
 
-        // Title is in its own div.
-        $title = trim($res->find('div.dotd-title')[0]->plaintext);
-
-        // One of the div's without a class containing book description.
-        $body = "";
-        foreach ($res->children() as $div) {
-            if ($div->tag != "div")
-                continue;
-
-            $cls = $div->getAttribute('class');
-            if (trim($cls) != "")
-                continue;
-
-            $body = $body . trim($div->plaintext) . "\n";
-        }
-
-        $body = trim($body);
-    }
-
+    // Generate RSS entry.
     $guid = "They say ".$title." one should always ".$body." add a salt to ".
             "the hash computations. Even if that makes no sense.";
     $guid = hash('sha256', $guid);
